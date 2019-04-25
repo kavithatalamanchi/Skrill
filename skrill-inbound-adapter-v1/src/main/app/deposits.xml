@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+    <flow name="depositsFlow">
+        <logger message="#[flow.name] - QuerystringProps: #[message.inboundProperties]  ---  UriProps: #[flowVars]  ---  Payload: #[message.payloadAs(java.lang.String)]" level="INFO" category="Deposits || Request Payload" doc:name="Deposits Request Payload" doc:description="Deposits Request Payload Logger"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+        <scripting:transformer doc:name="Transform Request Payload to Skrill Deposit API" doc:description="Input to groovy :  {&quot;CustomerId&quot;: &quot;123456&quot;,&quot;OrderId&quot;: 12345456,&quot;ProductId&quot;: 123456,&quot;LegalEntity&quot;: &quot;demoqco@sun-fish.com&quot;,&quot;Currency&quot;: &quot;USD&quot;,&quot;Amount&quot;: 10000,&quot;ClientIp&quot;: &quot;201.36.21.45&quot;, &quot;ClientSessionId&quot;: &quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;: 6, &quot;InstrumentToken&quot;: &quot;&quot;,&quot;Client&quot;: { &quot;FirstName&quot;: &quot;Someone&quot;,&quot;LastName&quot;: &quot;Buying&quot;,&quot;Phone&quot;: &quot;9876543223&quot;,&quot;Address&quot;: &quot;Bay Street&quot;,            &quot;City&quot;: &quot;Somewhere&quot;,            &quot;State&quot;: &quot;NY&quot;,            &quot;PostCode&quot;: &quot;12345&quot;,            &quot;Email&quot;: &quot;someone@gmail.com&quot;,     &quot;Country&quot;: &quot;USA&quot;          }         }
+Output from Groovy : {pay_to_email=demoqco@sun-fish.com, transaction_id=12345456, amount=10000, currency=USD, prepare_only=1, pay_from_email=someone@gmail.com, firstname=Someone, lastname=Buying, address=Bay Street, postal_code=12345, city=Somewhere, state=NY, country=USA, status_url=https://webhook.site/8841f220-f923-44b4-a4b2-a01a4098a72b}">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def request_payload = ""
+
+//Set Deposits Request
+def depositRequest = new JsonSlurper().setType(JsonParserType.LAX).parseText(payload)
+
+//Set FlowVars for Request Payload
+message.setInvocationProperty('despositsRequest',depositRequest)
+
+//creating request object for Skrill deposit API.
+request_payload =
+	[
+		pay_to_email:"${pay_to_email}", \
+		transaction_id:depositRequest.OrderId, \
+		amount:depositRequest.Amount, \
+		currency:depositRequest.Currency, \
+		prepare_only:"${prepare_only}", \
+		pay_from_email:depositRequest.Client.Email, \
+		firstname:depositRequest.Client.FirstName, \
+		lastname:depositRequest.Client.LastName, \
+		address:depositRequest.Client.Address, \
+		postal_code:depositRequest.Client.PostCode, \
+		city:depositRequest.Client.City, \
+		state:depositRequest.Client.State, \
+		country:depositRequest.Client.Country, \
+		status_url:"${Url.Notify}"
+	]
+				
+return request_payload]]></scripting:script>
+        </scripting:transformer>
+        <logger message="#[payload]" level="INFO" category="Deposits || Request Payload to Skrill Deposit API" doc:name="Request Payload to Skrill Deposit API" doc:description="Request Payload to Skrill Deposit API"/>
+        <http:request config-ref="HTTP_SKRILL_DEPOSITS_API_Configuration" path="${GatewaySvc.Path}" method="POST" doc:name="Quick Checkout Api" doc:description="Call to Qucik Checkout API">
+            <http:request-builder>
+                <http:header headerName="Content-Type" value="application/x-www-form-urlencoded"/>
+
+
+
+            </http:request-builder>
+            <http:success-status-code-validator values="200..499"/>
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Deposits || Response Payload from Quick Checkout Api" doc:name="Response from Quick Checkout Api" doc:description="Response from Quick Checkout Api Logger"/>
+        <scripting:transformer doc:name="Transform Deposit Response Payload" doc:description="Input to Groovy : 5c809538e5ca3273ea92664b564db1b8
+Output from Groovy : {&quot;OrderId&quot;:12345456,&quot;ProviderReference&quot;:&quot;&quot;,&quot;ClientRedirectURL&quot;:&quot;https://pay.skrill.com&quot;,&quot;ClientRedirectType&quot;:&quot;POST&quot;,&quot;PostParameters&quot;:&quot;5c809538e5ca3273ea92664b564db1b8&quot;,&quot;PostPayload&quot;:&quot;&quot;,&quot;RecommendedDisplayType&quot;:&quot;Redirect&quot;,&quot;RecommendedDisplayWidth&quot;:0,&quot;RecommendedDisplayHeight&quot;:0,&quot;PaymentStatus&quot;:&quot;REDIRECT&quot;,&quot;PaymentCode&quot;:&quot;&quot;,&quot;PaymentMessage&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}}">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def target_payload = new JsonBuilder()
+
+//Variable Declaration
+def request_payload = flowVars['despositsRequest']
+def paymentStatus = 'REDIRECT'
+def errorCode = ""
+def paymentMessage = ""
+def postParameters = ""
+
+//Setting Content-Type
+def content_Type = message.getInboundProperty('Content-Type');
+
+if (content_Type.equals("application/json")){
+	def depositResponse = new JsonSlurper().setType(JsonParserType.LAX).parseText(payload)
+	errorCode = depositResponse.code
+	paymentMessage = depositResponse.message
+}
+else{
+	postParameters = "sid=" + payload
+}
+
+//Construct Deposits Response           
+target_payload                    OrderId: request_payload.OrderId,
+                        ProviderReference: "",
+			            ClientRedirectURL: "${gateway_deposit_url}",
+	                   ClientRedirectType: "${client_redirect_type}",
+	                       PostParameters: postParameters ?: '',
+	                          PostPayload: "",
+	              RecommendedDisplayType : "${recommended_display_type}",
+	              RecommendedDisplayWidth: 0,             
+	             RecommendedDisplayHeight: 0,
+	                        PaymentStatus: paymentStatus,
+	                          PaymentCode: errorCode ?: '',
+	                       PaymentMessage: paymentMessage ?: '',
+	                       AdditionalInfo: [:]
+	                                            
+return target_payload.toString()]]></scripting:script>
+        </scripting:transformer>
+        <logger message="#[payload]" level="INFO" category="Deposits || Response Payload" doc:name="Deposit Response Payload" doc:description="Deposit Response Payload Logger"/>
+    </flow>
+</mule>

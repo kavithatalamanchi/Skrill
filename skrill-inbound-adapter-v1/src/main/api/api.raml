@@ -1,0 +1,355 @@
+#%RAML 0.8
+title: Skrill-Inbound-Adapter
+version: 1
+baseUri: https://services.axicorp.com.au
+
+mediaType: application/json
+schemas:
+  - ScalarReturn: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "ReturnValue": {"type": "string","description": "The return value for the function"},
+          "Message": {"type": "string","description": "The return value for the function"}
+        }
+      }
+  - postDepositRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "CustomerId": {"type": "string","description": "AxiCorp Unique CRM Customer Number"},
+          "OrderId": {"type": "integer","description": "AxiCorp Unique Deposit Id","minimum": 0},
+          "ProductId": {"type": "integer","description": "Axi Payment Product Id. May need to vary logic for different ids. e.g. credit card vs eWallet payments"},
+          "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+          "Currency": {"type": "string","description": "Currency of the deposit","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+          "Amount": {"type": "number","description": "Amount of the deposit","minimum": 0},
+          "InstrumentToken": {"type":"string","description": "For payments that support tokenised payment"},
+          "ClientIp": {"type": "string","description": "Customer IP Address"},
+          "ClientSessionId": {"type": "string","description": "Customer SessionId to assist with log tracing"},
+          "SystemSourceId": {"type": ["null","integer"],"description": "To assist with log tracing. 5: PartnerPortal, 6: OnboardingPortal "},
+          "Client": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {
+              "FirstName": { "type": "string","description": "This is the customer’s first name."},
+              "LastName": { "type": "string","description":"This is the customer’s last name."},
+              "Phone": { "type": "string","description":"This is the customer's phone number."},
+              "Address": { "type": "string","description":"This is the customer’s address."},
+              "City": { "type": "string","description":"This is the city where the address is located."},
+              "Country": { "type": "string","description":"This is the country where the address is located."},
+              "State": { "type": "string","description":"This is the state/province/region in which the customer lives."},
+              "PostCode": { "type": "string","description":"This is the zip, postal, or post code of the customer's address."},
+              "Email": { "type": "string","description":"This is the customer's email address."}
+              }                                     
+              },        
+            "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {},                              
+            "additionalProperties": { "type": ["null","string"] }
+            }
+         },
+        "required": ["OrderId","Currency","Amount"]
+      }
+  - postDepositResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "OrderId": {"type": "integer","description": "The unique id of the payment"},
+          "ProviderReference": {"type": "string","description": "The unique transaction id from the gateway"},
+          "ClientRedirectURL": {"type": "string","description": "The url to the hosted payment page of the gateway"},
+          "ClientRedirectType": {"type": "string", "enum":["NA","GET","POST"]},
+          "PostParameters": {"type": "string","description": "Optional RAW key value pairs to post to the above url. e.g. field1=x&field2=Y"},
+          "PostPayload": {"type": "string","description": "Optional custom payload. Usually json."},
+          "RecommendedDisplayType": {"type": "string","description": "Recommended display mode - Redirect, Popoup or Iframe"},
+          "RecommendedDisplayWidth": {"type": "number","description": "Recommended width in pixels"},
+          "RecommendedDisplayHeight": {"type": "number","description": "Recommended height in pixels"},
+          "PaymentStatus": {"type":"string", "enum":["PENDING","ACCEPTED","REJECTED","REDIRECT"],"description": "Payment status. PENDING, ACCEPTED or REJECTED for synchronous payments, REDIRECT for asynchronous"},
+          "PaymentCode": {"type": "string","description": "Gateway specific payment response code. Usually an integer."},
+          "PaymentMessage": {"type":"string","description":"Text response from payment gateway"},
+          "AdditionalInfo": {
+            "type": "object",
+            "description": "Additional custom key-value string pairs",
+            "properties": {},                        
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+ 
+  - paymentCMF: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "OrderId": {"type": "integer","description": "The unique id of the payment"},
+          "ClientIp": {"type": "string","description": "Customer IP Address"},
+          "ProviderReference": {"type": "string","description": "Gateway specific reference"},
+          "ProviderCode": {"type": "string","description": "Gateway specific payment response code. Usually an integer."},
+          "ProviderMessage": {"type":"string","description":"Text response from payment gateway"},
+          "ProviderApproved": {"type":"boolean","description":"True for payment Approved, otherwise false"},
+          "CurrencyReceived": {"type": "string","description": "Currency of the received deposit"},
+          "AmountReceived": {"type": "number","description": "Amount of the received deposit"},
+          "ClientAccNo": {"type": "string","description": "Partial CC number or Gateway customer account id or email"},
+          "ClientAccName": {"type": "string","description": "Cardholder or customer name if given"},
+          "AVS": {"type": "string","description": "For credit card AVS (address verification system) value if given. E.g. I for not verified"},
+          "Country": {"type": "string","description": "Country of the instrument if know. Iso A2 code. e.g. 'AU' for Australia","minLength" : 2,"maxLength" : 2},
+          "InstrumentType": {"type": "string","description": "Used to differentiate between methods on the same gateway."}
+        }
+      }
+
+  - postWithdrawalsRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "WithdrawalRequests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment","minimum": 0,"minLength": 1},
+                "LegalEntity": {"type": "string","description": "Axi Legal Entity for the related customer contract. e.g. AxiCorp Limited. Sometimes we need to use different merchantIds for each entity","minLength": 1},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Currency": {"type": "string","description": "Currency of the withdrawal","pattern": "[A-Z]","minLength": 3,"maxLength": 3},
+                "Amount": {"type": "number","description": "Amount of the withdrawal","minimum": 0,"minLength": 1},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs that are needed for the gateway",
+                  "properties": { 
+                                  "ClientEmail": {"type":"string","description":"This is the customer's email address","minLength": 1}                                                                    
+                                },
+                                "required": ["ClientEmail"],                             
+                  "additionalProperties": { "type": "string" }
+                }
+              },
+              "required": ["WithdrawalId","Amount"]
+            }
+          }  
+        }
+      }
+
+  - postWithdrawalsResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment"},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Status": {"type": "string", "enum":["PENDING","SENT","FAILED"], "description":"  This is the status of the response"},
+                "ProviderReference": {"type": "string","description": "The gateway transaction id given to the refund or payout"},
+                "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+                "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},
+                "Message": {"type": "string","description": "Further details."},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs",
+                  "properties": {},
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+      }
+  - checkStatusRequest: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type" : "array",
+        "properties" : {
+          "OrderId": {"type": "integer","description": "The unique id of the payment","minLength": 1},
+          "MerchantReference": {"type": "string","description": "The reference we used for the gateway (sometimes different or additiona prefix/suffixed orderid)"},
+          "ProviderReference": {"type": "string","description": "Gateway specific reference","minLength": 1}          
+        },
+        "required": ["OrderId","ProviderReference"] 
+      }
+      
+  - checkStatusResponse: |
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+              "properties": {
+                "WithdrawalId": {"type": "integer","description": "Out unique id for the payment"},
+                "ProviderDepositReference": {"type": "string","description": "Typically the gateway tranID to be refunded"},
+                "Status": {"type": "string", "enum":["PENDING","SENT","FAILED"], "description":"This is the status of the response"},
+                "ProviderReference": {"type": "string","description": "The gateway transaction id given to the refund or payout"},
+                "GatewayResponseCode": {"type": "string","description": "The gateway code used. Usually numerical. eg. status = 0"},
+                "GatewayResponseMessage": {"type": "string","description": "The gateway message - e.g. Successfully paid out"},
+                "Message": {"type": "string","description": "Further details."},
+                "AdditionalInfo": {
+                  "type": "object",
+                  "description": "Additional custom key-value string pairs",
+                  "properties": {},
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+      }   
+       
+  
+documentation:
+  - title: Introduction
+    content: |
+      API to act as common integration interface between AxiCorp systems and the external gateway - skrill
+      The standard pattern consists of four endpoints -
+        post /Deposits        
+        post /Notify        
+        post /Withdrawals
+        post /Withdrawals/CheckStatus                                    
+      A fifth custom endpoint may be required if the gateway supports http notification callbacks. There 
+      are numerous variations for each gateway that mean that this can't be part of the standard patterns.
+        e.g. 
+        post or get /Notify  --> which would retrieve and pass the parameters to /PaymentNotificationToCmf
+        Some gateways use post callbacks and some use get. Some use form-url-encoded parameters and standard post params... etc
+
+
+/Deposits:
+  description: Represents the resource for deposit requests aka orders aka sales
+  post:
+    description: Create a new deposit record with the gateway. Returns the status of the payment or client redirection values.
+    body:
+      schema: postDepositRequest
+      example: |
+        {
+          "CustomerId": "123456",
+          "OrderId": 123456,
+          "ProductId": 123456,
+          "LegalEntity": "Axicorp Limited",
+          "Currency": "CNY",
+          "Amount": 10000,
+          "ClientIp": "201.36.21.45",
+          "ClientSessionId": "QWE!@#wasdferty",
+          "SystemSourceId": 6,
+          "InstrumentToken": "",
+          "Client": {  
+            "FirstName": "Someone",
+            "LastName": "Buying",
+            "Phone": "9876543223",
+            "Address": "Bay Street",
+            "City": "Somewhere",
+            "Country": "USA",
+            "State": "NY",
+            "PostCode": "12345",
+            "Email": "someone@gmail.com"                                  
+         }
+    responses:
+      201:
+          description: Deposit request persisted successfully
+          body:
+              example: |
+                {
+                  "OrderId": 123456,
+                  "ProviderReference": "996150755430",
+                  "ClientRedirectURL": "",
+                  "ClientRedirectType": "",
+                  "PostParameters": "",
+                  "PostPayload": "",
+                  "RecommendedDisplayType": "Redirect",
+                  "RecommendedDisplayWidth": 0,
+                  "RecommendedDisplayHeight": 0,
+                  "PaymentStatus": "REDIRECT",
+                  "PaymentCode": "",
+                  "PaymentMessage": "true",
+                  "AdditionalInfo": {}
+                }            
+  
+/Notify:
+  description: | 
+    Takes gateway notification parameters as input, returns the CMF (common message format)
+    Scenario 1 use - if the gateway supports an http callback notification, implement that endpoint and pass the parameters to this endpoint
+    Scenario 2 use - if the gateway has to be polled for transation status, /CheckStatus is used and will pass the payload to this endpoint
+  post:
+    description: Parse notification parameters, map and publish to CMF queue, and return the CMF payload.
+                 Gateway sends all the notification parameters in the form of x-www-form-urlencoded.
+                 Expected urlecoded string for deposits is transaction_id=2508371015&country=IND&mb_amount=10.99&amount=10.99&firstname=John&IP_country=IN&md5sig=ADF4AC50C1CAA42A2959F305DA082BFA&merchant_id=50583907&lastname=Payer&payment_type=MSC&mb_transaction_id=2508371015&mb_currency=EUR&pay_from_email=abhinav.choudhary%40itcinfotech.com&sha2sig=8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&pay_to_email=demoqco%40sun-fish.com&currency=EUR&customer_id=107931940&payment_instrument_country=USA&status=2                
+                              
+    body:
+      application/x-www-form-urlencoded:
+       example: |       
+          gatewayspecificfieldx: x
+          gatewayspecificfieldy: y
+          gatewayspecificfieldz: z
+          payment_ccy: USD
+          payment_amount: 73.57
+          etc: etc...       
+        
+    responses:
+      200:
+          description: Success Response
+          body:
+           text/plain:
+            example: |
+                OK 
+                             
+/Withdrawals:
+  post:
+    description: |
+      Process a list of withdrawal requests. 
+      Scenario 1 - Will iterate through each request and call the corresponding refund/payout or payout API
+      Scenario 2 - Return a gateway specific batch file (usually csv or xls). The file will be used to manually upload the requests to the gateway portal.
+    body:
+      schema: postWithdrawalsRequest
+      example: |
+          {
+            "WithdrawalRequests": [
+              {
+                 "WithdrawalId": 15164931122194,
+                 "LegalEntity": "Axicorp Limited",
+                 "ProviderDepositReference": "123xyz",
+                 "Currency": "CNY",
+                 "Amount": 10000,
+                 "AdditionalInfo": {
+                                      "ClientEmail": "wong@email.com"                                      
+                                   }                
+              },
+              {
+                 "WithdrawalId": 151649311224578,
+                 "LegalEntity": "Axicorp Limited",
+                 "ProviderDepositReference": "124xyz",
+                 "Currency": "CNY",
+                 "Amount": 10000.01,
+                 "AdditionalInfo": {
+                                      "ClientEmail": "wong@email.com"                                      
+                                   }                
+              }
+            ]
+          }
+          
+    responses:
+      201:
+          body:
+            schema: ScalarReturn
+            example: |
+              {
+                "ReturnValue" : "Queued",                  
+                "Message" : "DEV.q.skrill.withdrawal.request.v1"                
+              }
+  /CheckStatus: 
+    description: |
+       Request to get the status of one or more pending deposits. Return the status of all deposits 
+       and also call PaymentNotificationToCmf() for any approved or declined results.
+    post:
+     description: checkstatus method
+     body:
+      schema: checkStatusRequest
+      example: |
+         [
+          {
+            "OrderId" : 996150769483,
+            "MerchantReference" : "7220",
+            "ProviderReference" : "50JiXZUjMXXQcfYrFdYFsnsc3%2BIN%2B7Et"            
+          },
+          {
+             "OrderId" : 996150769482,
+            "MerchantReference" : "7220",
+            "ProviderReference" : "HGoSDn4VjMmacOZdcOr7qaZmCkxgXMSP"
+          }
+         ]
+     responses:
+       201:
+           description: CheckStatus Response
+           body:
+              schema: ScalarReturn
+              example: |
+                {         
+                  "ReturnValue": "Queued",      
+                  "Message": "DEV.q.skrill.withdrawal.status.out.v1"    
+                }

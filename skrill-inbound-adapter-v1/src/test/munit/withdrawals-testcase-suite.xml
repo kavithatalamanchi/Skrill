@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration" mock-connectors="false" mock-inbounds="false"/>
+    <spring:beans>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:notify.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+       </spring:beans>
+    <munit:test name="withdrawalsFlow-TestCase1(SuccessScenario)" description="Verifying withdrawals flow with test request for success scenario.">
+        <munit:set payload="#['{&quot;WithdrawalRequests&quot;:[{&quot;WithdrawalId&quot;:9221359,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;EUR&quot;,&quot;Amount&quot;:253,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen&quot;,&quot;ClientAccountNumber&quot;:&quot;12345&quot;,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientEmail&quot;:&quot;wong@email.com&quot;}}]}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for withdrawalsFlow"/>
+        <flow-ref name="withdrawalsFlow" doc:name="Flow-ref to withdrawals Flow" doc:description="Allowing the 'withdrawals Flow' to be referenced such that the request message processing continues in the withdrawals Flow."/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals message="Response is not as expected" expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" doc:description="Validating whether the 'Return Value'actual and the expected values are equal or not"/>
+        <munit:assert-true condition="#[payload.Message != empty]" doc:name="Assert Message" message=" Message is invalid." doc:description="Validates whether the conditon for 'Message' is true or not."/>
+    </munit:test>
+    
+    <munit:test name="SendmoneyRequest_Flow-TestCase1(SuccessScenario)" description="Verifying withdrawals flow with test request for success scenario.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock SendMoneyAPI: action=prepare" doc:description="Mocking Send money API Action prepare">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['SendMoneyAPI:action=prepare']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;yes&quot;?&gt;&lt;response&gt;&lt;sid&gt;74fc6635a0aa9b740e9c33c9683ab704&lt;/sid&gt;&lt;/response&gt;']" mimeType="application/xml"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on Send money Response Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Sendmoney Response Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-true message="Sid is invalid" condition="#[payload.sid != empty]" doc:name="Assert Sid" doc:description="Validates whether the conditon for 'Sid' is true or not."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <set-payload value="#['{&quot;WithdrawalId&quot;:9221357,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;EUR&quot;,&quot;Amount&quot;:253,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen&quot;,&quot;ClientAccountNumber&quot;:&quot;12345&quot;,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientEmail&quot;:&quot;wong@email.com&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for Send money Request_Flow"/>
+        <flow-ref name="SendmoneyRequest_Flow" doc:name="Flow-ref to Send money Request_Flow" doc:description="Allowing the 'Send money Request_Flow' to be referenced such that the request message processing continues in the Send money Request_Flow."/>
+    </munit:test>
+   <munit:test name="SendmoneyResponseFlow-TestCase2(SuccessScenario)" description="Verifying withdrawals flow with test request for success scenario.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock SendMoneyAPI : action=transfer" doc:description="Mocking Sendmoney API Action transfer">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['SendMoneyAPI:action=transfer']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;yes&quot;?&gt;&lt;response&gt;&lt;transaction&gt;&lt;amount&gt;123.00&lt;/amount&gt;&lt;currency&gt;EUR&lt;/currency&gt;&lt;id&gt;2513754783&lt;/id&gt;&lt;status&gt;1&lt;/status&gt;&lt;status_msg&gt;scheduled&lt;/status_msg&gt;&lt;/transaction&gt;&lt;/response&gt;']" mimeType="application/xml"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on withdrawals Approved Queue Payload Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['withdrawals Approved Queue Payload Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="Status is invalid." expectedValue="#['1']" actualValue="#[payload.Status]" doc:name="Assert Status" doc:description="Validating whether the 'Status' actual and the expected values are equal or not."/>
+                <munit:assert-true message="GatewayResponseMessage is null" condition="#[payload.GatewayResponseMessage !=empty]" doc:name="Assert Status_Msg" doc:description="Validates whether the conditon for 'Amount' is true or not."/>
+                <munit:assert-true message="WithdrawalId is invalid." condition="#[payload.WithdrawalId != empty]" doc:name="Assert WithdrawalId"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['{&quot;sid&quot;:&quot;74fc6635a0aa9b740e9c33c9683ab704&quot;}']" doc:name="Set Request Payload">
+            <munit:inbound-properties>
+                <munit:inbound-property key="RequestId" value="65513245654"/>
+            </munit:inbound-properties>
+        </munit:set>
+        <flow-ref name="SendmoneyResponse_Flow" doc:name="Flow-ref to Send money Response_Flow" doc:description="Allowing the 'Send money Response_Flow' to be referenced such that the request message processing continues in the Send money Response_Flow."/>
+    </munit:test>
+    <munit:test name="SendmoneyRequestFlow-TestCase3(FailureScenarioForInvalidAmount)" description="Verifying withdrawals flow with test request for success scenario.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock SendMoneyAPI : action=prepare" doc:description="Mocking Send money API Action prepare">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['SendMoneyAPI:action=prepare']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&lt;response&gt;&lt;error&gt;&lt;error_msg&gt;INVALID_AMOUNT&lt;/error_msg&gt;&lt;/error&gt;&lt;/response&gt;']" mimeType="application/xml"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on Dead Letter Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Dead Letter Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="error_msg is invalid." expectedValue="#['INVALID_AMOUNT']" actualValue="#[payload.response.error.error_msg]" doc:name="Assert error_msg" doc:description="Validating whether the 'error_msg' actual and the expected values are equal or not."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <set-payload value="#['{&quot;WithdrawalId&quot;:9221357,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;EUR&quot;,&quot;Amount&quot;:0,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen&quot;,&quot;ClientAccountNumber&quot;:&quot;12345&quot;,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientEmail&quot;:&quot;wong@email.com&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for Send money Request Flow"/>
+        <flow-ref name="SendmoneyRequest_Flow" doc:name="Flow-ref to Send money Request_Flow" doc:description="Allowing the ' Send money Request_Flow' to be referenced such that the request message processing continues in the  Send money Request_Flow."/>
+        <munit:assert-on-equals message="Error Message is invalid." expectedValue="#['{ &quot;message&quot;: &quot;Internal Service Error&quot;}']" actualValue="#[payload]" doc:name="Assert Error Message"/>
+    </munit:test>
+    <munit:test name="SendmoneyRequestFlow-TestCase4(FailureScenarioForInvalidCurrency)" description="Verifying withdrawals flow with test request for failure scenario with Invalid Currency.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock SendMoneyAPI : action=prepare" doc:description="Mocking Send money API Action prepare">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['SendMoneyAPI:action=prepare']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&lt;response&gt;&lt;error&gt;&lt;error_msg&gt;NOT_SUPPORTED_CURRENCY_CNY&lt;/error_msg&gt;&lt;/error&gt;&lt;/response&gt;']" mimeType="application/xml"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on Dead Letter Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Dead Letter Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="error_msg is invalid" expectedValue="#['NOT_SUPPORTED_CURRENCY_CNY']" actualValue="#[payload.response.error.error_msg]" doc:name="Assert error_msg" doc:description="Validating whether the 'error_msg' actual and the expected values are equal or not."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <set-payload value="#['{&quot;WithdrawalId&quot;:9221357,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;CNY&quot;,&quot;Amount&quot;:670,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen&quot;,&quot;ClientAccountNumber&quot;:&quot;12345&quot;,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientEmail&quot;:&quot;wong@email.com&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for withdrawalsFlow"/>
+        <flow-ref name="SendmoneyRequest_Flow" doc:name="Flow-ref to Send money Request_Flow" doc:description="Allowing the ' Send money Request_Flow' to be referenced such that the request message processing continues in the  Send money Request_Flow."/>
+        <munit:assert-on-equals message="Error Message is invalid." expectedValue="#['{ &quot;message&quot;: &quot;Internal Service Error&quot;}']" actualValue="#[payload]" doc:name="Assert Error Message" doc:description="Validating whether the 'Error Message' actual and the expected values are equal or not."/>
+    </munit:test>
+    <munit:test name="SendmoneyRequestFlow-TestCase5(FailureScenarioForSid)" description="Verifying withdrawals flow with test request for failure scenario without Sid.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock SendMoneyAPI : action=prepare" doc:description="Mocking Send money API Action prepare">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['SendMoneyAPI:action=prepare']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;yes&quot;?&gt;&lt;response&gt;&lt;error&gt;&lt;error_msg&gt;ALREADY_EXECUTED&lt;/error_msg&gt;&lt;/error&gt;&lt;/response&gt;']" mimeType="application/xml"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on Dead Letter Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Dead Letter Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="error_msg is invalid." expectedValue="#['ALREADY_EXECUTED']" actualValue="#[payload.response.error.error_msg]" doc:name="Assert error_msg" doc:description="Validating whether the 'error_msg' actual and the expected values are equal or not."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <set-payload value="#['{&quot;WithdrawalId&quot;:9221357,&quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,&quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,&quot;Currency&quot;:&quot;EUR&quot;,&quot;Amount&quot;:253,&quot;AdditionalInfo&quot;:{&quot;ClientName&quot;:&quot;Stephen&quot;,&quot;ClientAccountNumber&quot;:&quot;12345&quot;,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientEmail&quot;:&quot;wong@email.com&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for Send money Request Flow"/>
+        <flow-ref name="SendmoneyRequest_Flow" doc:name="Flow-ref to Send money Request_Flow" doc:description="Allowing the ' Send money Request_Flow' to be referenced such that the request message processing continues in the  Send money Request_Flow."/>
+        <munit:assert-on-equals message=" Error Message is invalid." expectedValue="#['{ &quot;message&quot;: &quot;Internal Service Error&quot;}']" actualValue="#[payload]" doc:name="Assert Error Message" doc:description="Validating whether the 'Error Message' actual and the expected values are equal or not."/>
+    </munit:test>
+    <munit:test name="withdrawalsFlow-TestCase2(SuccessScenarioForBatchInputRequest)" description="Verifying withdrawals flow with test request for batch input success scenario.">
+        <set-payload value="#['{
+   &quot;WithdrawalRequests&quot;:[
+      {
+         &quot;WithdrawalId&quot;:9221359,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221360,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221361,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221362,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221363,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221364,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221365,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:922166,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221367,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      },
+	  {
+         &quot;WithdrawalId&quot;:9221368,
+         &quot;LegalEntity&quot;:&quot;Axicorp Limited&quot;,
+         &quot;ProviderDepositReference&quot;:&quot;123xyz&quot;,
+         &quot;Currency&quot;:&quot;EUR&quot;,
+         &quot;Amount&quot;:253,
+         &quot;AdditionalInfo&quot;:{
+            &quot;ClientName&quot;:&quot;Stephen&quot;,
+            &quot;ClientAccountNumber&quot;:&quot;12345&quot;,
+            &quot;ClientIp&quot;:&quot;201.36.21.45&quot;,
+            &quot;ClientEmail&quot;:&quot;wong@email.com&quot;
+         }
+      }
+   ]
+}']" doc:name="Set Payload" doc:description="Setting Batch Request Payload for withdrawalsFlow"/>
+        <flow-ref name="withdrawalsFlow" doc:name="Flow-ref to withdrawals Flow" doc:description="Allowing the 'withdrawals Flow' to be referenced such that the request message processing continues in the withdrawals Flow."/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals message="Response is not as expected" expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" doc:description="Validating whether the 'Return Value'actual and the expected values are equal or not"/>
+        <munit:assert-true condition="#[payload.Message != empty]" doc:name="Assert Message" message=" Message is invalid." doc:description="Validates whether the conditon for 'Message' is true or not."/>
+    </munit:test>
+
+</mule>

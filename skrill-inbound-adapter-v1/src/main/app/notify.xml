@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+ <flow name="notifyRequestFlow">
+        <logger message="flow.name] - QuerystringProps: #[message.inboundProperties]  ---  UriProps: #[flowVars]  ---  Payload: #[message.payloadAs(java.lang.String)]" level="INFO" category="Notify || Notify Request Payload" doc:name="Notify Request Payload" doc:description="Notify Request Payload Logger"/>
+        <jms:outbound-endpoint queue="${platform.inbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Notify Inbound Queue" doc:description="Notify Inbound  Queue with the response from Skrill"/>
+        <set-payload value="OK" mimeType="text/plain" doc:name="Set Scalar Message" doc:description="Setting Scalar Response"/>
+        <logger message="#[payload]" level="INFO" category="Notify || Notify Scalar Payload" doc:name="Scalar Response" doc:description="Notify Scalar payload Logger"/>
+    </flow>
+    <flow name="notifyResponseFlow">
+        <jms:inbound-endpoint queue="${platform.inbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Notify Inbound Queue" doc:description="Notify Inbound Queue with response from Skrill">
+            <jms:transaction action="ALWAYS_BEGIN"/>
+        </jms:inbound-endpoint>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Notify || Response Payload from Notify Inbound Queue" doc:name="Response Payload from Notify Inbound Queue" doc:description="Response Payload from Notify Inbound Queue Logger"/>
+        <scripting:transformer doc:name="Validate MD5 Sign and Transform to Notify Response" doc:description="Input to Groovy : {transaction_id=2508371015, country=IND, mb_amount=10.99, amount=10.99, firstname=John, IP_country=IN, md5sig=ADF4AC50C1CAA42A2959F305DA082BFA, merchant_id=50583907, lastname=Payer, payment_type=MSC, mb_currency=EUR, mb_transaction_id=2508371015, pay_from_email=abhinav.choudhary%40itcinfotech.com, sha2sig=8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66, pay_to_email=demoqco%40sun-fish.com, currency=EUR, customer_id=107931940, payment_instrument_country=USA, status=5}
+Output from Groovy : {&quot;OrderId&quot;:&quot;2508371015&quot;,&quot;ClientIp&quot;:&quot;&quot;,&quot;ProviderReference&quot;:&quot;2508371015&quot;,&quot;ProviderCode&quot;:null,&quot;ProviderMessage&quot;:null,&quot;ProviderApproved&quot;:false,&quot;CurrencyReceived&quot;:&quot;EUR&quot;,&quot;AmountReceived&quot;:&quot;10.99&quot;,&quot;ClientAccNo&quot;:&quot;&quot;,&quot;ClientAccName&quot;:&quot;JohnPayer&quot;,&quot;AVSres&quot;:&quot;&quot;,&quot;Country&quot;:&quot;IND&quot;,&quot;InstrumentType&quot;:&quot;&quot;}">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+import java.util.*
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import javax.xml.bind.DatatypeConverter;
+
+def responsePayload = new JsonBuilder()
+
+// Notify Request Payload
+def requestPayload = payload
+def status = requestPayload.status
+message.setInvocationProperty('notifyStatusVar',status)
+
+//variables declaration
+String secret="${api_secret}"
+MessageDigest mesDigest_Secret = MessageDigest.getInstance("MD5")
+def signature = ""
+
+//Constructing Payload on the basis of payload
+if(status == '2'){
+	//converting secret into MD5
+	mesDigest_Secret.update(secret.getBytes());
+	byte[] digest_Secret = mesDigest_Secret.digest();
+	String secretHash = DatatypeConverter.printHexBinary(digest_Secret).toUpperCase();
+	secretHash = secretHash.toString()
+   
+	//Sign parameters	
+	def signFields = requestPayload.merchant_id+requestPayload.transaction_id+secretHash+requestPayload.mb_amount+requestPayload.mb_currency+status
+
+	//Sign Creation from parameters
+	 
+		MessageDigest mesDigest = MessageDigest.getInstance("MD5");
+		mesDigest.update(signFields.getBytes());
+		byte[] digest = mesDigest.digest();
+		signature = DatatypeConverter.printHexBinary(digest).toUpperCase();
+
+	// sign validation
+	if (signature.equals(requestPayload.md5sig))	
+	{
+		responsePayload		OrderId: requestPayload.transaction_id,
+						   ClientIp: "",
+				  ProviderReference: requestPayload.mb_transaction_id ?: '',
+					   ProviderCode: "",
+					ProviderMessage: "APPROVED",
+				   ProviderApproved: true,
+				   CurrencyReceived: requestPayload.currency,
+					 AmountReceived: requestPayload.amount, 
+						ClientAccNo: "",
+					  ClientAccName: requestPayload.firstname+" "+requestPayload.lastname ?: '',
+							 AVSres: "",
+							Country: requestPayload.country ?: '',
+					 InstrumentType: ""
+				
+			return responsePayload.toString()
+	}
+	//Throwing sign validation error and catching in global Exception
+	else{ 
+		   def invalidSign = 'Gateway signature does not match :  (' + signature + ' vs ' + requestPayload.md5sig + ')'
+		   throw new IllegalArgumentException(invalidSign);	
+	}
+		
+}
+else{
+	
+	responsePayload		OrderId: requestPayload.transaction_id,
+					   ClientIp: "",
+			  ProviderReference: requestPayload.mb_transaction_id ?: '',
+				   ProviderCode: requestPayload.code,
+				ProviderMessage: "REJECTED",
+			   ProviderApproved: false,
+			   CurrencyReceived: requestPayload.currency,
+				 AmountReceived: requestPayload.amount, 
+					ClientAccNo: "",
+				  ClientAccName: requestPayload.firstname+" "+requestPayload.lastname ?: '',
+						 AVSres: "",
+						Country: requestPayload.country ?: '',
+				 InstrumentType: ""
+			
+		return responsePayload.toString()
+}]]></scripting:script>
+        </scripting:transformer>
+
+        <logger message="#[payload]" level="INFO" doc:name="Notify Response After Sign Validatation" category="Notify || Notify Payload after Sign Validation" doc:description="Notify Response Payload Logger"/>
+        <choice doc:name="Route Message Based on Transaction Status" doc:description="Condition to route the response  into Queue based on transaction status">
+            <when expression="#[flowVars.notifyStatusVar==2]">
+                <logger message="JMSREPLAY_${platform.outbound.queue}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Notify || Notify Response Approved Payload" doc:name="Notify Response Approved Payload Log replay" doc:description="Notify Response Approved Payload Logger"/>
+                <jms:outbound-endpoint doc:name="Approved Queue" connector-ref="Async_JMS_Connector" queue="${platform.outbound.queue}" doc:description="Notify Approved Queue with Approved status response">
+                    <jms:transaction action="JOIN_IF_POSSIBLE"/>
+                </jms:outbound-endpoint>
+
+            </when>
+            <when expression="#[flowVars.notifyStatusVar==-2]">
+                <logger message="JMSREPLAY_${database.inbound.queue}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Notify || Notify Response Declined Payload" doc:name="Notify Response Declined Payload Log replay" doc:description="Notify Response Declined Payload Logger"/>
+                <jms:outbound-endpoint doc:name="Declined Queue" connector-ref="Async_JMS_Connector" queue="${database.inbound.queue}" doc:description="Notify Declined Queue with Rejected status response">
+                    <jms:transaction action="JOIN_IF_POSSIBLE"/>
+                </jms:outbound-endpoint>
+
+            </when>
+            <otherwise>
+                <logger level="INFO" doc:name="Discard Logger" category="Notify || Discard Logger" message="#[payload]" doc:description="Discard Logger"/>
+            </otherwise>
+        </choice>
+    </flow>
+</mule>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml" xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd">
+      <flow name="withdrawalsFlow">
+        <logger message="#[flow.name] - QuerystringProps: #[message.inboundProperties]  ---  UriProps: #[flowVars]  ---  Payload: #[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals || Withdrawals Request Payload" doc:name="Withdrawals Request Payload" doc:description="Deposits Request Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <foreach collection="#[payload.WithdrawalRequests]" doc:name="For Each">
+            <json:object-to-json-transformer doc:name="Object to JSON"/>
+            <logger message="JMSREPLAY_${gateway.withdrawal.inbound.queue}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals || Withdrawals Request Log replay" doc:name="Withdrawals Request to Inbound Withdrawals queue Log replay"/>
+            <jms:outbound-endpoint queue="${gateway.withdrawal.inbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Withdrawals Request to outbound Withdrawals queue" doc:description="Withdrawals outbound  queue  with request payload"/>
+        </foreach>
+        <set-payload value="{&quot;ReturnValue&quot;: &quot;Queued&quot;,  &quot;Message&quot;: &quot;${gateway.withdrawal.inbound.queue}&quot; }" doc:name="Set Scalar Message" doc:description="Final withdrawals scalar response"/>
+
+        <logger message="#[payload]" level="INFO" category="withdrawals || Set Scalar Message" doc:name="Set Scalar Message Logger"/>    </flow>
+    <flow name="SendmoneyRequest_Flow">
+        <jms:inbound-endpoint queue="${gateway.withdrawal.inbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Withdrawals Request to inbound Withdrawals queue" doc:description="Withdrawals inbound  queue  with request payload">
+            <jms:transaction action="ALWAYS_BEGIN"/>
+        </jms:inbound-endpoint>
+    <logger message="#[payload]" level="INFO" category="Withdrawals || Sendmoney Request Payload" doc:name="Sendmoney Request Payload" doc:description="Register Payment Request Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <scripting:transformer doc:name="Transform Payload to Sendmoney API" doc:description="Transform withdrawals payload  to call sendmoney API Action prepare to get sid from it">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def result = ""
+def Request_payload = payload
+message.setInvocationProperty('Requestmap',Request_payload.WithdrawalId )
+
+	//prepare the queryparams object		
+		result =[
+				action:"${actionprepare}", \
+				email:"${merchant_email}", \
+				password:"${merchant_password}", \
+				amount:Request_payload.Amount,\
+				currency:Request_payload.Currency, \
+				bnf_email:Request_payload.AdditionalInfo.ClientEmail, \
+				subject:"${subject}", \
+				note:"${note}", \
+				frn_trn_id:Request_payload.WithdrawalId
+				]
+				
+		return result]]></scripting:script>
+        </scripting:transformer>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals || Transform Request to Sendmoney API" doc:name="Transform Request to Sendmoney API" />
+        <http:request config-ref="HTTP_SKRILL_API_Configuration" path="/app/pay.pl" method="GET" doc:name="SendMoneyAPI:action=prepare" doc:description="Call to Register Payment API">
+            <http:request-builder>
+                <http:query-params expression="#[payload]"/>
+
+
+
+
+            </http:request-builder>
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals  || Sendmoney API Action prepare Logger" doc:name="Response from SendMoneyAPI"/>
+        <json:xml-to-json-transformer doc:name="XML to JSON"/>
+
+        <scripting:transformer doc:name="Transform Sendmoney API Action prepare Response" doc:description="Transform sendmoneyApi response and check whether sid is comming or not. In case of Error scenario throws exception send to deadletter queue">
+            <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+	def request_Payload=new JsonSlurper().setType(JsonParserType.LAX).parseText(payload)
+	def data= new JsonBuilder()
+	message.setOutboundProperty('RequestId',flowVars['Requestmap'])
+	if(request_Payload.response.error == null)
+	{
+			
+		data  sid:request_Payload.response.sid			
+	}
+	else
+	{
+		def error = 'Gateway response as:'+request_Payload.response.error.error_msg
+		throw new IllegalArgumentException(error);  
+	}		
+			return data.toString()]]></scripting:script>
+        </scripting:transformer>
+
+
+
+        <logger message="JMSREPLAY_${gateway.withdrawal.inbound.queue.sid}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals  || Sendmoney Response Payload" doc:name="Sendmoney Response Payload Log replay" doc:description="Register Payment Response Payload Logger"/>
+        <jms:outbound-endpoint doc:name="Sendmoney Response Queue" queue="${gateway.withdrawal.inbound.queue.sid}" connector-ref="Async_JMS_Connector" doc:description="SendMoneyAPI response payload">
+            <jms:transaction action="JOIN_IF_POSSIBLE"/>
+        </jms:outbound-endpoint>
+    </flow>
+    <flow name="SendmoneyResponse_Flow">
+        <jms:inbound-endpoint queue="${gateway.withdrawal.inbound.queue.sid}" connector-ref="Async_JMS_Connector" doc:name="Sendmoney Response Queue" doc:description="SendMoneyAPI response queue with response payload">
+            <jms:transaction action="ALWAYS_BEGIN"/>
+        </jms:inbound-endpoint>
+        <logger message="#[payload]" level="INFO" category="Sendmoney || Response Payload Logger" doc:name="Response Payload Logger"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <set-variable variableName="withdrawalsId" value="#[message.inboundProperties.'RequestId']" doc:name="WithdrawalsId"/>
+        <logger message="#[payload]" level="INFO" category="SendmoneyResponse || Response Payload To sendmoney API Action transfer" doc:name="Response Payload To sendmoney API Action transfer"/>
+        <http:request config-ref="HTTP_SKRILL_API_Configuration" path="/app/pay.pl" method="GET" doc:name="SendMoneyAPI:action=transfer">
+            <http:request-builder>
+                <http:query-param paramName="sid" value="#[payload.sid]"/>
+                <http:query-param paramName="action" value="${actiontransfer}"/>
+            </http:request-builder>
+        </http:request>
+        <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawals  || Sendmoney API Action transfer Logger" doc:name="Sendmoney API Action transfer Logger"/>
+        <scripting:transformer doc:name="Transform Sendmoney API Action Transfer Response payload" doc:description="Transform withdrawals final response as per withdrawals schema and send to withdrawals Approved Queue">
+            <scripting:script engine="Groovy"><![CDATA[log.info('Tranfer response: ' + payload)
+import groovy.json.*
+			def gatewayResponse = new XmlSlurper().parseText(payload) //tranferResponse node (see example in notes)
+			
+			def Id = gatewayResponse.depthFirst().find(){ it.name() == 'id' }.text()
+			def status = gatewayResponse.depthFirst().find(){ it.name() == 'status' }.text()
+			def status_msg = gatewayResponse.depthFirst().find(){ it.name() == 'status_msg' }.text()
+			
+			
+			def data = [ \
+				WithdrawalId: message.getInvocationProperty('withdrawalsId'), \
+				ProviderDepositReference:Id, \
+				ProviderReference: "", \
+				Status: status, \
+				GatewayResponseCode: "", \
+				GatewayResponseMessage:status_msg, \
+				Message:"", \
+				AdditionalInfo: [:] \
+			]
+			
+			return data]]></scripting:script>
+        </scripting:transformer>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <logger message="JMSREPLAY_${gateway.withdrawal.outbound.queue}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Sendmoney Response || Sendmoney API Action Transfer Response Log replay" doc:name="Sendmoney API Action Transfer Response Log replay"/>
+        <jms:outbound-endpoint queue="${gateway.withdrawal.outbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Withdrawals Approved Queue Payload Queue" doc:description="Withdrawals Approved queue with response payload">
+            <jms:transaction action="JOIN_IF_POSSIBLE"/>
+        </jms:outbound-endpoint>
+    </flow>
+
+</mule>

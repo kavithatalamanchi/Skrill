@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+<configuration defaultExceptionStrategy-ref="GlobalExceptionStrategy" doc:name="Configuration">
+        <http:config useTransportForUris="false"/>
+    </configuration>
+    <choice-exception-strategy name="GlobalExceptionStrategy">
+        <catch-exception-strategy when="#[exception.causedBy(java.lang.IllegalArgumentException:invalidSign || error)]" doc:name="Catch Sign Validation Exception Strategy">
+            <scripting:transformer doc:name="Transform Exception payload" doc:description="Transforming exception payload into dead letter queue.">
+                <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+def responsePayload=payload
+return responsePayload.toString()
+	]]></scripting:script>
+            </scripting:transformer>
+            <logger message="JMSREPLAY_${platform.inbound.queue.dlq}:#[message.payloadAs(java.lang.String)]" level="INFO" category="Skrill || Exception payload" doc:name="Sign Validation Exception payload" doc:description="Sign Validation Exception payload Logger"/>
+            <jms:outbound-endpoint queue="${platform.inbound.queue.dlq}" connector-ref="Async_JMS_Connector" doc:name="Dead Letter Queue" doc:description="Storing the Exception payload into deadletter queue"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Internal Service Error&quot;}" doc:name="Set Exception Payload" doc:description="Setting Response Payload incase signature validation is failed."/>
+            <logger message="#[payload]" level="INFO" category="Skrill || Set Scalar Exception Message" doc:name="Set Scalar Exception Message" doc:description="Set Scalar Exception Message Logger"/>
+        </catch-exception-strategy>
+        <catch-exception-strategy doc:name="Catch Exception Strategy">
+            <set-payload value="#[exception.message]" doc:name="Set Exception Payload" doc:description="All other Exception messages"/>
+            <logger message="#[payload]" level="INFO" category="Skrill ||  All Other Exception payload" doc:name="All Other Exceptions Logger" doc:description="All Other Exceptions Logger"/>
+        </catch-exception-strategy>
+    </choice-exception-strategy>
+</mule>

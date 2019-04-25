@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd">
+    <munit:config mock-connectors="false" mock-inbounds="false" name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:notify.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+    </spring:beans>
+    <munit:test name="DepositsFlow-TestCase1(SuccessScenario)" description="Verifying deposits flow with test request for Success scenario.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Quick Checkout Api" doc:description="Mocking  Quick Checkout  API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Quick Checkout Api']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['306d72928c0685613abb5255ead881b1']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;CustomerId&quot;:&quot;100001&quot;,&quot;OrderId&quot;:20522089,&quot;ProductId&quot;:123456,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;USD&quot;,&quot;Amount&quot;:10000,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientSessionId&quot;:&quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;&quot;,&quot;Client&quot;:{&quot;FirstName&quot;:&quot;Someone&quot;,&quot;LastName&quot;:&quot;Buying&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;Bay Street&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;NY&quot;,&quot;PostCode&quot;:&quot;12345&quot;,&quot;Email&quot;:&quot;someone@gmail.com&quot;,&quot;Country&quot;:&quot;USA&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for deposits flow"/>
+        <flow-ref name="depositsFlow" doc:name="Flow-ref to depositsFlow" doc:description="Allowing the 'deposits Flow' to be referenced such that the request message processing continues in the Deposits flow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <flow-ref name="common_assertions-deposits-testcase-suite-subflow" doc:name="ref common_assertions" doc:description="Allowing the 'common_assertions-deposit-testcase-suite-subflow' to be referenced such that the request message processing continues in the respected flow."/>
+        <munit:assert-on-equals message="Post Parameters  is incorrect" expectedValue="#['sid=306d72928c0685613abb5255ead881b1']" actualValue="#[payload.PostParameters]" doc:name="Assert Post Parameters" doc:description="Validates whether the 'PostParameters' is as expected or not."/>
+    </munit:test>
+    <munit:test name="DepositsFlow-TestCase2(SuccessScenarioForAmount=10.50)" description="Verifying deposits flow with test request for Success scenario with Amount as 10.50">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Quick Checkout Api" doc:description="Mocking  Quick Checkout  API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Quick Checkout Api']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['9cfebba4a1f5c5acaf000a7e9d3d8678']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;CustomerId&quot;:&quot;109076&quot;,&quot;OrderId&quot;:20522089,&quot;ProductId&quot;:123456,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;USD&quot;,&quot;Amount&quot;:10.50,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientSessionId&quot;:&quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;&quot;,&quot;Client&quot;:{&quot;FirstName&quot;:&quot;Someone&quot;,&quot;LastName&quot;:&quot;Buying&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;Bay Street&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;NY&quot;,&quot;PostCode&quot;:&quot;12345&quot;,&quot;Email&quot;:&quot;someone@gmail.com&quot;,&quot;Country&quot;:&quot;USA&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for deposits flow"/>
+        <flow-ref name="depositsFlow" doc:name="Flow-ref to depositsFlow" doc:description="Allowing the 'deposits Flow' to be referenced such that the request message processing continues in the Deposits flow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <flow-ref name="common_assertions-deposits-testcase-suite-subflow" doc:name="ref common_assertions" doc:description="Allowing the 'common_assertions-deposit-testcase-suite-subflow' to be referenced such that the request message processing continues in the respected flow."/>
+        <munit:assert-on-equals message="Post Parameters  is incorrect" expectedValue="#['sid=9cfebba4a1f5c5acaf000a7e9d3d8678']" actualValue="#[payload.PostParameters]" doc:name="Assert Post Parameters" doc:description="Validates whether the 'PostParameters' is as expected or not."/>
+    </munit:test>
+    <munit:test name="DepositsFlow-TestCase3(SuccessScenarioForLargeAmount)" description="Verifying deposits flow with test request for failure scenario with Large Amount ">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Quick Checkout Api" doc:description="Mocking  Quick Checkout  API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Quick Checkout Api']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['db3cb113f4e5d4bf71e3ab840bf6102c']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;CustomerId&quot;:&quot;5463542&quot;,&quot;OrderId&quot;:20522089,&quot;ProductId&quot;:123456,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;USD&quot;,&quot;Amount&quot;:1000000,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientSessionId&quot;:&quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;&quot;,&quot;Client&quot;:{&quot;FirstName&quot;:&quot;Someone&quot;,&quot;LastName&quot;:&quot;Buying&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;Bay Street&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;NY&quot;,&quot;PostCode&quot;:&quot;12345&quot;,&quot;Email&quot;:&quot;someone@gmail.com&quot;,&quot;Country&quot;:&quot;USA&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for deposits flow"/>
+        <flow-ref name="depositsFlow" doc:name="Flow-ref to DepositsFlow" doc:description="Allowing the 'deposits Flow' to be referenced such that the request message processing continues in the Deposits flow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <flow-ref name="common_assertions-deposits-testcase-suite-subflow" doc:name="ref common_assertions" doc:description="Allowing the 'common_assertions-deposit-testcase-suite-subflow' to be referenced such that the request message processing continues in the respected flow."/>
+        <munit:assert-on-equals message="Post Parameters is incorrect" expectedValue="#['sid=db3cb113f4e5d4bf71e3ab840bf6102c']" actualValue="#[payload.PostParameters]" doc:name="Assert Post Parameters" doc:description="Validates whether the 'PostParameters' is as expected or not."/>
+    </munit:test>
+    <munit:test name="DepositsFlow-TestCase4(SuccessScenarioForAmount=0)" description="Verifying deposits flow with test request for success scenario with Amount as 0">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Quick Checkout Api" doc:description="Mocking  Quick Checkout  API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Quick Checkout Api']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['2393c9fdd2514d3e3f09bbbebc55846c']"/>
+        </mock:when>
+        <munit:set payload="#['{&quot;CustomerId&quot;:&quot;9385435&quot;,&quot;OrderId&quot;:20522089,&quot;ProductId&quot;:123456,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;USD&quot;,&quot;Amount&quot;:0,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientSessionId&quot;:&quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;&quot;,&quot;Client&quot;:{&quot;FirstName&quot;:&quot;Someone&quot;,&quot;LastName&quot;:&quot;Buying&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;Bay Street&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;NY&quot;,&quot;PostCode&quot;:&quot;12345&quot;,&quot;Email&quot;:&quot;someone@gmail.com&quot;,&quot;Country&quot;:&quot;USA&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for deposits flow"/>
+        <flow-ref name="depositsFlow" doc:name="Flow-ref to depositsFlow" doc:description="Allowing the 'deposits Flow' to be referenced such that the request message processing continues in the Deposits flow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <flow-ref name="common_assertions-deposits-testcase-suite-subflow" doc:name="ref common_assertions" doc:description="Allowing the 'common_assertions-deposit-testcase-suite-subflow' to be referenced such that the request message processing continues in the respected flow."/>
+        <munit:assert-on-equals message="Post Parameters is incorrect" expectedValue="#['sid=2393c9fdd2514d3e3f09bbbebc55846c']" actualValue="#[payload.PostParameters]" doc:name="Assert Post Parameters" doc:description="Validates whether the 'PostParameters' is as expected or not."/>
+    </munit:test>
+    <munit:test name="DepositsFlow-TestCase5(FailureScenarioForInvalidOrderId)" description="Verifying deposits flow with test request for failure scenario with  Invalid OrderId">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Quick Checkout Api" doc:description="Mocking  Quick Checkout  API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Quick Checkout Api']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['{&quot;code&quot;:&quot;BAD_REQUEST&quot;,&quot;message&quot;:&quot;Already paid for 2136204963&quot;}']" mimeType="application/json">
+                <mock:inbound-properties>
+                    <mock:inbound-property key="Content-Type" value="application/json"/>
+                </mock:inbound-properties>
+            </mock:then-return>
+        </mock:when>
+        <munit:set payload="#['{&quot;CustomerId&quot;:&quot;2375690&quot;,&quot;OrderId&quot;:12345,&quot;ProductId&quot;:123456,&quot;LegalEntity&quot;:&quot;&quot;,&quot;Currency&quot;:&quot;USD&quot;,&quot;Amount&quot;:0,&quot;ClientIp&quot;:&quot;201.36.21.45&quot;,&quot;ClientSessionId&quot;:&quot;QWE!@#wasdferty&quot;,&quot;SystemSourceId&quot;:6,&quot;InstrumentToken&quot;:&quot;&quot;,&quot;Client&quot;:{&quot;FirstName&quot;:&quot;Someone&quot;,&quot;LastName&quot;:&quot;Buying&quot;,&quot;Phone&quot;:&quot;9876543223&quot;,&quot;Address&quot;:&quot;Bay Street&quot;,&quot;City&quot;:&quot;Somewhere&quot;,&quot;State&quot;:&quot;NY&quot;,&quot;PostCode&quot;:&quot;12345&quot;,&quot;Email&quot;:&quot;someone@gmail.com&quot;,&quot;Country&quot;:&quot;USA&quot;}}']" doc:name="Set Request Payload" doc:description="Setting Request Payload for deposits flow"/>
+        <flow-ref name="depositsFlow" doc:name="Flow-ref to depositsFlow" doc:description="Allowing the 'deposits Flow' to be referenced such that the request message processing continues in the Deposits flow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <flow-ref name="common_assertions-deposits-testcase-suite-subflow" doc:name="ref common_assertions" doc:description="Allowing the 'common_assertions-deposit-testcase-suite-subflow' to be referenced such that the request message processing continues in the respected flow."/>
+        <munit:assert-true message="Payment Code is invalid" condition="#[payload.PaymentCode != empty]" doc:name="Assert Payment Code" doc:description="Validates whether the  condition for 'PaymentCode'  is true or not."/>
+        <munit:assert-true message="Payment Message is invalid" condition="#[payload.PaymentMessage != empty]" doc:name="Assert Payment Message" doc:description="Validates whether the  condition for 'PaymentMessage'  is true or not."/>
+    </munit:test>
+    <sub-flow name="common_assertions-deposits-testcase-suite-subflow">
+        <munit:assert-true message="OrderId is invalid" condition="#[payload.OrderId &gt; 0]" doc:name="Assert OrderId" doc:description="Validates whether the 'OrderId' condition is true or not."/>
+        <munit:assert-true message="ClientRedirectURL is empty" condition="#[payload.ClientRedirectURL !=  empty]" doc:name="Assert  ClientRedirectURL" doc:description="Validates whether the 'Client RedirectURL' condition is true or not."/>
+        <munit:assert-on-equals message="PaymentStatus !=REDIRECT" expectedValue="#['REDIRECT']" actualValue="#[payload.PaymentStatus]" doc:name="Assert Payment Status" doc:description="Validates whether the 'PaymentStatus' is as expected or not."/>
+        <munit:assert-on-equals message="Redirect type is incorrect" expectedValue="#['POST']" actualValue="#[payload.ClientRedirectType]" doc:name="Assert ClientRedirectType" doc:description="Validates whether the 'ClientRedirectType'is as expected or not."/>
+    </sub-flow>
+</mule>

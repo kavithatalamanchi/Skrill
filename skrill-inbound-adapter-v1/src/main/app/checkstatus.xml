@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <flow name="checkstatusFlow">
+        <logger message="#[flow.name] - QuerystringProps: #[message.inboundProperties]  ---  UriProps: #[flowVars]  ---  Payload: #[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawal CheckStatus || Request Collection Payload" doc:name="CheckStatus Request Collection Payload"/>
+        <json:json-to-object-transformer returnClass="java.util.ArrayList" doc:name="JSON to Object"/>
+        <foreach doc:name="For Each" doc:description="Looping on check status collection object and get the checkstatus request payload for processing. ">
+            <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawal CheckStatus || Request Payload" doc:name="CheckStatus Request Payload"/>
+            <scripting:transformer doc:name="Transform Payload to View Transaction Status" doc:description="Input to groovy: {OrderId=996150769482, MerchantReference=7220, ProviderReference=2365959}
+output from groovy: {action=status_trn, email=demoqco@sun-fish.com, password=*****, trn_id=2365959}">
+                <scripting:script engine="Groovy"><![CDATA[def request_payload = payload
+
+result = [ 
+			action: "${checkstatus_action}",
+			 email: "${merchant_email}",
+		  password: "${merchant_password}",
+			trn_id: request_payload.ProviderReference                          
+          ]
+return result]]></scripting:script>
+            </scripting:transformer>
+            <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawal CheckStatus || Request Payload to View Transaction API" doc:name="Request Payload to View Transaction API"/>
+            <http:request config-ref="HTTP_SKRILL_API_Configuration" path="app/query.pl" method="GET" doc:name="MQI - ViewTransactionStatusAPI" doc:description="ViewTransactionStatusAPI">
+                <http:request-builder>
+                    <http:query-params expression="#[payload]"/>
+
+
+                </http:request-builder>
+
+            </http:request>
+            <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" category="Withdrawal CheckStatus || Response Payload from View Transaction API" doc:name="Response Payload from View Transaction API"/>
+            <scripting:transformer doc:name="Transform Payload to CheckStatus Response" doc:description="Valid Request to Groovy: 200		OK
+status=2&amp;merchant_id=50583907&amp;mb_transaction_id=2510503527&amp;mb_amount=1.2&amp;pay_to_email=beneficiary%40domain.com&amp;currency=EUR&amp;amount=1.2&amp;transaction_id=2365959&amp;pay_from_email=demoqco%40sun-fish.com&amp;mb_currency=EUR
+
+Response from Groovy: {&quot;WithdrawalId&quot;:&quot;2365959&quot;,&quot;ProviderDepositReference&quot;:&quot;&quot;,&quot;Status&quot;:&quot;SENT&quot;,&quot;ProviderReference&quot;:&quot;2510503527&quot;,&quot;GatewayResponseCode&quot;:&quot;&quot;,&quot;GatewayResponseMessage&quot;:&quot;PROCESSED&quot;,&quot;Message&quot;:&quot;&quot;,&quot;AdditionalInfo&quot;:{}}">
+                <scripting:script engine="Groovy"><![CDATA[import groovy.json.*
+
+def response_payload = payload
+if(response_payload.split("\n")[0] == "200\t\tOK"){
+def response_payload_body = response_payload.split("\n")[1]
+
+//Code for URL Decoding
+Map<String, String> response_fields_Map = new HashMap<String, String>();
+def decode =  { URLDecoder.decode(it) }
+def amp_split = response_payload_body.tokenize('&')
+for(String responseField : amp_split)
+{
+	def eq_split = responseField.tokenize('=')
+    response_fields_Map.put(decode(eq_split[0]), decode(eq_split[1]));
+}
+
+//CheckStatus Response
+def withdrawal_checkstatus_res
+def gateway_response_code
+def gateway_response_message
+def withdrawals_status
+if(response_fields_Map.status.toInteger() == 2 )
+{
+       withdrawals_status= "SENT"
+       gateway_response_code = ""
+       gateway_response_message = "PROCESSED"
+}
+else if(response_fields_Map.status.toInteger() == 0 )
+
+{      withdrawals_status= "PENDING"
+       gateway_response_code = ""
+       gateway_response_message = "PENDING"
+}
+else
+{      withdrawals_status= "FAILED"
+       gateway_response_code = response_fields_Map.status
+       gateway_response_message = "FAILED"
+}
+
+checkstatus_res =[ 
+								WithdrawalId: response_fields_Map.transaction_id, 
+					ProviderDepositReference: "",
+									  Status: withdrawals_status ?: '', 
+						   ProviderReference: response_fields_Map.mb_transaction_id ?: '', 
+					     GatewayResponseCode: gateway_response_code ?: '',
+					  GatewayResponseMessage: gateway_response_message,
+					                 Message: "",
+					          AdditionalInfo: [:]							
+                  ]
+				  
+message.setInvocationProperty('status',withdrawals_status)
+return checkstatus_res
+}
+else {
+ throw new JsonException("RequestDataValidationFailed");
+}]]></scripting:script>
+            </scripting:transformer>
+            <json:object-to-json-transformer doc:name="Object to JSON"/>
+            <choice doc:name="Verify Withdrawals Status" doc:description="Condition to route the response  into Queue based on transaction status">
+                <when expression="#[(flowVars.status=='SENT')||(flowVars.status=='FAILED')]">
+                    <logger message="JMSREPLAY_${gateway.withdrawal.outbound.queue}: #[message.payloadAs(java.lang.String)]" level="INFO" category="Skrill Withdrawal CheckStatus | Response to Queue Log replay" doc:name="Response  payload to Queue Log replay"/>
+                    <jms:outbound-endpoint queue="${gateway.withdrawal.outbound.queue}" connector-ref="Async_JMS_Connector" doc:name="Withdrawals Status Queue" doc:description="Publish withdrawals status messages into withdrawals status queue"/>
+                </when>
+                <otherwise>
+                    <logger message="#[payload]" level="INFO" category="Skrill Withdrawal CheckStatus | Pending Response" doc:name="Pending Response Payload"/>
+                </otherwise>
+            </choice>
+
+
+        </foreach>
+        <set-payload value="{  &quot;ReturnValue&quot;: &quot;Queued&quot;,  &quot;Message&quot;: &quot;${gateway.withdrawal.outbound.queue}&quot; }" mimeType="application/json" doc:name="Scalar Payload" doc:description="Scalar message: Checkstatus  response queued"/>
+        <logger message="#[payload]" level="INFO" category="Skrill Withdrawal CheckStatus | Scalar Response Payload" doc:name="Scalar Response"/>
+    </flow>
+</mule>

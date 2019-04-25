@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    <munit:config name="munit" mock-connectors="false" mock-inbounds="false" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:notify.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+
+    </spring:beans>
+    <munit:test name="checkstatusFlow-TestCase1(SuccessScenarioforStatus='SENT')" description="Verifying checkstatus flow with test request for success scenario with status='sent'.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock MQI - View transaction status API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['MQI - View transaction status API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['200\t\tOK\nstatus=2&amp;merchant_id=50583907&amp;mb_transaction_id=2510503527&amp;mb_amount=1.2&amp;pay_to_email=beneficiary%40domain.com&amp;currency=EUR&amp;amount=1.2&amp;transaction_id=2365959&amp;pay_from_email=demoqco%40sun-fish.com&amp;mb_currency=EUR']" encoding="UTF-8" mimeType="text/html">
+                <mock:invocation-properties>
+                    <mock:invocation-property key="Content-Type" value="text/html" mimeType="text/html"/>
+                </mock:invocation-properties>
+            </mock:then-return>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to Withdrawals Status Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Withdrawals Status Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals expectedValue="#['SENT']" actualValue="#[payload.Status]" doc:name="Assert Status=SENT" message="Response message is not valid as expected"/>
+                <munit:assert-on-equals message="Gateway Response Message is invalid." expectedValue="#['PROCESSED']" actualValue="#[payload.GatewayResponseMessage]" doc:name="Assert Gateway Response Message"/>
+                <munit:assert-true message="WithdrawalId is invalid." condition="#[payload.WithdrawalId &gt; 0]" doc:name="Assert WithdrawalId"/>
+                <munit:assert-true message="ProviderReference is incorrect." condition="#[payload.ProviderReference != empty]" doc:name="Assert Provider Reference"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['[{&quot;OrderId&quot;:&quot;2235&quot;,&quot;MerchantReference&quot;:&quot;7220&quot;,&quot;ProviderReference&quot;:&quot;098567&quot;}]']" doc:name="Set Request payload"/>
+        <flow-ref name="checkstatusFlow" doc:name="Flow-ref to checkstatusFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" message="Response Return Value is not valid as expected"/>
+        <munit:assert-true message="Message is Invalid" condition="#[payload.Message != empty]" doc:name="Assert Message"/>
+    </munit:test>
+   <munit:test name="checkstatusFlow-TestCase2(SuccessScenarioforStatus='PENDING')" description="Verifying checkstatus flow with test request for success scenario with status='Pending'.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock MQI - View transaction status API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['MQI - View transaction status API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['200\t\tOK\nstatus=0&amp;merchant_id=50583907&amp;mb_transaction_id=2510503527&amp;mb_amount=1.2&amp;pay_to_email=beneficiary%40domain.com&amp;currency=EUR&amp;amount=1.2&amp;transaction_id=2365959&amp;pay_from_email=demoqco%40sun-fish.com&amp;mb_currency=EUR']" encoding="UTF-8" mimeType="text/html"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Object to JSON']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <munit:assert-on-equals message="Status is invalid." expectedValue="#['PENDING']" actualValue="#[payload.Status]" doc:name="Assert Status =PENDING"/>
+                <munit:assert-on-equals message="Gateway Response Message isinvalid." expectedValue="#['PENDING']" actualValue="#[payload.GatewayResponseMessage]" doc:name="Assert Gateway Response Message"/>
+                <munit:assert-true message="WithdrawalId is invalid." condition="#[payload.WithdrawalId &gt; 0]" doc:name="Assert WithdrawalId"/>
+                <munit:assert-true message="ProviderReference is incorrect." condition="#[payload.ProviderReference != empty]" doc:name="Assert Provider Reference"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['[{&quot;OrderId&quot;:&quot;2235&quot;,&quot;MerchantReference&quot;:&quot;7220&quot;,&quot;ProviderReference&quot;:&quot;7986795&quot;}]']" doc:name="Set Request payload"/>
+        <flow-ref name="checkstatusFlow" doc:name="Flow-ref to checkstatusFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" message="Response message is not valid as expected"/>
+        <munit:assert-true message="Message is Invalid" condition="#[payload.Message != empty]" doc:name="Assert Message"/>
+    </munit:test>   
+   <munit:test name="checkstatusFlow-TestCase3(SuccessScenarioforStatus='FAILED')" description="Verifying checkstatus flow with test request for success scenario with status='Failed'.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock MQI - View transaction status API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['MQI - View transaction status API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['200\t\tOK\nstatus=-2&amp;merchant_id=50583907&amp;mb_transaction_id=2510503527&amp;mb_amount=1.2&amp;pay_to_email=beneficiary%40domain.com&amp;currency=EUR&amp;amount=1.2&amp;transaction_id=2365959&amp;pay_from_email=demoqco%40sun-fish.com&amp;mb_currency=EUR']" encoding="UTF-8" mimeType="text/html"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to Withdrawals Status Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Withdrawals Status Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+            	<logger message="#[payload]" level="INFO" doc:name="Response to Queue" category="MUnit Test || checkstatusFlow-TestCase3(SuccessScenarioforStatus=FAILED)"/>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-true message="WithdrawalId is invalid." condition="#[payload.WithdrawalId &gt; 0]" doc:name="Assert WithdrawalId"/>
+                <munit:assert-on-equals expectedValue="#['FAILED']" actualValue="#[payload.Status]" doc:name="Assert Status=FAILED" message="Response message is not valid as expected"/>
+                <munit:assert-true message="ProviderReference is incorrect." condition="#[payload.ProviderReference != empty]" doc:name="Assert Provider Reference"/>
+                <munit:assert-on-equals message="Gateway Response Message is invalid." expectedValue="#['FAILED']" actualValue="#[payload.GatewayResponseMessage]" doc:name="Assert Gateway Response Message"/>
+                <munit:assert-on-equals message="GatewayResponseCode" expectedValue="#['-2']" actualValue="#[payload.GatewayResponseCode]" doc:name="Assert Gateway Response Code"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['[{&quot;OrderId&quot;:&quot;2238&quot;,&quot;MerchantReference&quot;:&quot;7220&quot;,&quot;ProviderReference&quot;:&quot;358865443&quot;}]']" doc:name="Set Request payload"/>
+        <flow-ref name="checkstatusFlow" doc:name="Flow-ref to checkstatusFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" message="Response message is not valid as expected"/>
+        <munit:assert-true message="Message is Invalid" condition="#[payload.Message != empty]" doc:name="Assert Message"/>
+     </munit:test>
+   <!-- <munit:test name="checkstatusFlow-TestCase4(FailureScenarioforInvalidRequest)" description="Verifying checkstatus flow with test request for failure scenario.">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock MQI - View transaction status API">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['MQI - View transaction status API']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['403\tTransaction not found: 2235']" encoding="UTF-8" mimeType="text/html"/>
+        </mock:when>
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre publish to queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Object to JSON']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+            	<logger message="#[payload]" level="INFO" doc:name="Response to Queue" category="MUnit Test || checkstatusFlow-TestCase4(SuccessScenarioforInvalid Request)"/>
+                <munit:assert-on-equals expectedValue="#['FAILED']" actualValue="#[payload.Status]" doc:name="Assert Status=FAILED" message="Response message is not valid as expected"/>
+                <munit:assert-on-equals message="Gateway Response Message is invalid." expectedValue="#['FAILED']" actualValue="#[payload.GatewayResponseMessage]" doc:name="Assert Gateway Response Message"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#['[{&quot;OrderId&quot;:&quot;2235&quot;,&quot;MerchantReference&quot;:&quot;7220&quot;,&quot;ProviderReference&quot;:&quot;34568765&quot;}]']" doc:name="Set Request payload"/>
+        <flow-ref name="checkstatusFlow" doc:name="Flow-ref to checkstatusFlow"/>
+        <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+        <munit:assert-on-equals expectedValue="#['Queued']" actualValue="#[payload.ReturnValue]" doc:name="Assert Return Value" message="Response message is not valid as expected"/>
+        <munit:assert-true message="Message is Invalid" condition="#[payload.Message != empty]" doc:name="Assert Message"/>
+    </munit:test> -->
+
+</mule>

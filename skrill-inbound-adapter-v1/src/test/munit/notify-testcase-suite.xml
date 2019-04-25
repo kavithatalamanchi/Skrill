@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    <munit:config mock-connectors="false" mock-inbounds="false" name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:deposits.xml"/>
+        <spring:import resource="classpath:api.xml"/>
+        <spring:import resource="classpath:config.xml"/>
+        <spring:import resource="classpath:notify.xml"/>
+        <spring:import resource="classpath:withdrawals.xml"/>
+        <spring:import resource="classpath:checkstatus.xml"/>
+        <spring:import resource="classpath:error-handler.xml"/>
+       </spring:beans>
+    <munit:test name="NotifyRequestFlow-TestCase1(SuccessScenario)" description="Verifying functionality of Notify Request flow for Deposits in skrill-Notify-implementation-flow">
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BFA&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;2&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for NotifyRequestFlow."/>
+        <flow-ref name="notifyRequestFlow" doc:name="Flow-ref to notify Request Flow" doc:description="Allowing the 'Notify Response Flow' to be referenced such that the request message processing continues in the Notify Response flow."/>
+        <munit:assert-on-equals message="Response is Invalid" expectedValue="#['OK']" actualValue="#[payload]" doc:name="Assert Scalar Response" doc:description="Assert Scalar Response "/>
+    </munit:test>
+    <munit:test name="NotifyResponseFlow-TestCase1(Success_ScenarioForStatus='Processed')" description="Verifying functionality of notify Response flow with status='Processed' in skrill-Notify-implementation-flow">
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre-publish to Approved Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Approved Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="Provider Approved is invalid." expectedValue="#[true]" actualValue="#[payload.ProviderApproved]" doc:name="Assert Provider Approved" doc:description="Validates whether the 'ProviderApproved' actual value and expected value is equal or not. "/>
+                <flow-ref name="common_NotifyResponseFlow-success-testcase-suiteSub_Flow" doc:name="ref common_assertions" doc:description="Allowing the 'NotifyResponseFlow' to be referenced such that assertions continuied in common assertions Sub-flow."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BFA&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;2&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for Notify Response Flow."/>
+        <flow-ref name="notifyResponseFlow" doc:name="Flow-ref to notify Response Flow" doc:description="Allowing the 'Notify Response Flow' to be referenced such that the request message processing continues in the Notify Response flow."/>
+    </munit:test>
+    <munit:test name="NotifyResponseFlow-TestCase2(Success_ScenarioForStatus='Failed')" description="Verifying functionality of notify Response flow with Status='Failed' in skrill-Notify-implementation-flow">
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre-publish to Declined Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Declined Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="Provider Approved is invalid." expectedValue="#[false]" actualValue="#[payload.ProviderApproved]" doc:name="Assert Provider Approved" doc:description="Validates whether the 'ProviderApproved' actual value and expected value is equal or not. "/>
+                <flow-ref name="common_NotifyResponseFlow-success-testcase-suiteSub_Flow" doc:name="ref common_assertions" doc:description="Allowing the 'NotifyResponseFlow' to be referenced such that assertions continuied in common assertions Sub-flow."/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BFA&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;-2&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for Notify Response Flow."/>
+        <flow-ref name="notifyResponseFlow" doc:name="Flow-ref to notify Response Flow" doc:description="Allowing the 'Notify Response Flow' to be referenced such that the request message processing continues in the Notify Response flow."/>
+    </munit:test>
+    <munit:test name="NotifyResponseFlow-TestCase3(Success_ScenarioForStatus='Pending')" description="Verifying functionality of notify Response flow with status='Pending' in skrill-Notify-implementation-flow">
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on pre-publish to Discard Message">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Validate MD5 Sign and Transform to Notify Response']"/>
+            </mock:with-attributes>
+            <mock:assertions-after-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="Provider Approved is invalid." expectedValue="#[false]" actualValue="#[payload.ProviderApproved]" doc:name="Assert Provider Approved" doc:description="Validates whether the 'ProviderApproved' actual value and expected value is equal or not. "/>
+                <flow-ref name="common_NotifyResponseFlow-success-testcase-suiteSub_Flow" doc:name="ref common_assertions" doc:description="Allowing the 'NotifyResponseFlow' to be referenced such that assertions continuied in common assertions Sub-flow."/>
+            </mock:assertions-after-call>
+        </mock:spy>
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BFA&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;0&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for Notify Response Flow."/>
+        <flow-ref name="notifyResponseFlow" doc:name="Flow-ref to notify Response Flow" doc:description="Allowing the 'Notify Response Flow' to be referenced such that the request message processing continues in the Notify Response flow."/>
+    </munit:test>
+    <!-- <munit:test name="NotifyResponseFlow-TestCase4(Success_ScenarioforStatus='CANCELLED')" description="Verifying functionality of notify Response flow for Withdrawals  in skrill-Notify-implementation-flow">
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on prepublish to Declined Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Declined Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <json:json-to-object-transformer returnClass="java.util.HashMap" doc:name="JSON to Object"/>
+                <munit:assert-on-equals message="Provider Approved is invalid." expectedValue="#[false]" actualValue="#[payload.ProviderApproved]" doc:name="Assert Provider Approved"/>
+                <flow-ref name="common_NotifyResponseFlow-success-testcase-suiteSub_Flow" doc:name="ref common_assertions"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BFA&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;-1&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for NotifyResponseFlow."/>
+        <flow-ref name="notifyResponseFlow" doc:name="Flow-ref to notifyResponseFlow"/>
+    </munit:test> -->
+    <munit:test name="NotifyResponseFlow-TestCase4(FailureScenarioForSignValidation)" description="This test case is used to validate sign coming from request payload and the expected sign." doc:description="Setting Request Payload for NotifyResponseFlow.">
+        <mock:spy messageProcessor=".*:.*" doc:name="Spy on Dead Letter Queue">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Dead Letter Queue']"/>
+            </mock:with-attributes>
+            <mock:assertions-before-call>
+                <munit:assert-on-equals message="Invalid Response" expectedValue="#['[country:USD, firstname:John, mb_amount:10.99, IP_country:IN, md5sig:ADF4AC50C1CAA42A2959F305DA082BF, merchant_id:50583907, mb_transaction_id:2508371015, mb_currency:EUR, sha2sig:8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66, currency:EUR, payment_instrument_country:USA, transaction_id:2508371015, amount:10.99, lastname:Payer, payment_type:MSC, pay_from_email:abhinav.choudhary%2540itcinfotech.com, pay_to_email:demoqco%2540sun-fish.com, customer_id:107931940, status:2]']" actualValue="#[payload]" doc:name="Assert Payload in Dead Letter Queue"/>
+            </mock:assertions-before-call>
+        </mock:spy>
+        <munit:set payload="#[{&quot;transaction_id&quot;:&quot;2508371015&quot;,&quot;country&quot;:&quot;USD&quot;,&quot;mb_amount&quot;:&quot;10.99&quot;,&quot;amount&quot;:&quot;10.99&quot;,&quot;firstname&quot;:&quot;John&quot;,&quot;IP_country&quot;:&quot;IN&quot;,&quot;md5sig&quot;:&quot;ADF4AC50C1CAA42A2959F305DA082BF&quot;,&quot;merchant_id&quot;:&quot;50583907&quot;,&quot;lastname&quot;:&quot;Payer&quot;,&quot;payment_type&quot;:&quot;MSC&quot;,&quot;mb_transaction_id&quot;:&quot;2508371015&quot;,&quot;mb_currency&quot;:&quot;EUR&quot;,&quot;pay_from_email&quot;:&quot;abhinav.choudhary%2540itcinfotech.com&quot;,&quot;sha2sig&quot;:&quot;8BC5B64D5501C74DA07C8D53AC00A4760CD85C34AC9E98E89EDD5AA0AED91A66&quot;,&quot;pay_to_email&quot;:&quot;demoqco%2540sun-fish.com&quot;,&quot;currency&quot;:&quot;EUR&quot;,&quot;customer_id&quot;:&quot;107931940&quot;,&quot;payment_instrument_country&quot;:&quot;USA&quot;,&quot;status&quot;:&quot;2&quot;}]" doc:name="Set Request Payload" doc:description="Setting Request Payload for NotifyResponseFlow."/>
+        <flow-ref name="notifyResponseFlow" doc:name="Flow-ref to notifyResponseFlow"/>
+        <munit:assert-on-equals message="message is invalid" expectedValue="#['{ &quot;message&quot;: &quot;Internal Service Error&quot;}']" actualValue="#[payload]" doc:name="Assert Error message"/>
+    </munit:test> 
+    <sub-flow name="common_NotifyResponseFlow-success-testcase-suiteSub_Flow">
+        <munit:assert-true message="OrderId is invalid" condition="#[payload.OrderId &gt; 0]" doc:name="Assert OrderId" doc:description="Validates whether the 'OrderId' condition is true or not."/>
+        <munit:assert-true message="Provider Reference empty" condition="#[payload.ProviderReference != empty]" doc:name="Assert Provider Reference" doc:description="Validates whether the 'Provider Reference' condition is true or not."/>
+        <munit:assert-true message="Amount should be greater than zero." condition="#[payload.AmountReceived&gt;=0]" doc:name="Assert Amount Received" doc:description="Validates whether the 'Amount Received' condition is true or not."/>
+        <munit:assert-true message="Currency CurrencyReceived" condition="#[payload.CurrencyReceived != empty]" doc:name="Assert Currency Received" doc:description="Validates whether the 'Currency Received' condition is true or not."/>
+        <munit:assert-true message="InstrumentType incorrect" condition="#[payload.InstrumentType == empty]" doc:name="Assert Instrument Type" doc:description="Validates whether the 'Instrument Type' condition is true or not."/>
+    </sub-flow>
+</mule>
