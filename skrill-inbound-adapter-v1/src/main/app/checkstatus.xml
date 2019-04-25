@@ -20,6 +20,7 @@ output from groovy: {action=status_trn, email=demoqco@sun-fish.com, password=***
 
 result = [ 
 			action: "${checkstatus_action}",
+			action1: "${checkstatus_action}",
 			 email: "${merchant_email}",
 		  password: "${merchant_password}",
 			trn_id: request_payload.ProviderReference                          
